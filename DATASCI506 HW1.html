@@ -3870,41 +3870,51 @@ $isHappy
 </div>
 <p>The percentage is 14.3%, using all 1,000 starting integers as the denominator.</p>
 </section>
-<section id="longest-sequence-before-reaching-1-or-cycling" class="level3">
-<h3 class="anchored" data-anchor-id="longest-sequence-before-reaching-1-or-cycling">Longest sequence before reaching 1 or cycling</h3>
+<section id="longest-happy-sequence-before-reaching-1" class="level3">
+<h3 class="anchored" data-anchor-id="longest-happy-sequence-before-reaching-1">Longest happy sequence before reaching 1</h3>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb55"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>sequence_lengths <span class="ot">&lt;-</span> <span class="fu">vapply</span>(</span>
-<span id="cb55-2"><a href="#cb55-2" aria-hidden="true" tabindex="-1"></a>  happy_results,</span>
-<span id="cb55-3"><a href="#cb55-3" aria-hidden="true" tabindex="-1"></a>  <span class="cf">function</span>(result) <span class="fu">length</span>(result<span class="sc">$</span>sequence),</span>
-<span id="cb55-4"><a href="#cb55-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">integer</span>(<span class="dv">1</span>)</span>
-<span id="cb55-5"><a href="#cb55-5" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb55-6"><a href="#cb55-6" aria-hidden="true" tabindex="-1"></a>longest_length <span class="ot">&lt;-</span> <span class="fu">max</span>(sequence_lengths)</span>
-<span id="cb55-7"><a href="#cb55-7" aria-hidden="true" tabindex="-1"></a>longest_starts <span class="ot">&lt;-</span> <span class="fu">which</span>(sequence_lengths <span class="sc">==</span> longest_length)</span>
-<span id="cb55-8"><a href="#cb55-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb55-9"><a href="#cb55-9" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(</span>
-<span id="cb55-10"><a href="#cb55-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">starting_value =</span> longest_starts,</span>
-<span id="cb55-11"><a href="#cb55-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">sequence_length =</span> longest_length</span>
-<span id="cb55-12"><a href="#cb55-12" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb55"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>happy_starts <span class="ot">&lt;-</span> <span class="fu">which</span>(is_happy)</span>
+<span id="cb55-2"><a href="#cb55-2" aria-hidden="true" tabindex="-1"></a>happy_lengths <span class="ot">&lt;-</span> <span class="fu">vapply</span>(</span>
+<span id="cb55-3"><a href="#cb55-3" aria-hidden="true" tabindex="-1"></a>  happy_results[is_happy],</span>
+<span id="cb55-4"><a href="#cb55-4" aria-hidden="true" tabindex="-1"></a>  <span class="cf">function</span>(result) <span class="fu">length</span>(result<span class="sc">$</span>sequence),</span>
+<span id="cb55-5"><a href="#cb55-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">integer</span>(<span class="dv">1</span>)</span>
+<span id="cb55-6"><a href="#cb55-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb55-7"><a href="#cb55-7" aria-hidden="true" tabindex="-1"></a>longest_length <span class="ot">&lt;-</span> <span class="fu">max</span>(happy_lengths)</span>
+<span id="cb55-8"><a href="#cb55-8" aria-hidden="true" tabindex="-1"></a>longest_starts <span class="ot">&lt;-</span> happy_starts[happy_lengths <span class="sc">==</span> longest_length]</span>
+<span id="cb55-9"><a href="#cb55-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb55-10"><a href="#cb55-10" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(</span>
+<span id="cb55-11"><a href="#cb55-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">starting_value =</span> longest_starts,</span>
+<span id="cb55-12"><a href="#cb55-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">sequence_length =</span> longest_length</span>
+<span id="cb55-13"><a href="#cb55-13" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>   starting_value sequence_length
-1             269              19
-2             296              19
-3             629              19
-4             667              19
-5             676              19
-6             692              19
-7             766              19
-8             799              19
-9             926              19
-10            962              19
-11            979              19
-12            997              19</code></pre>
+1             356               7
+2             365               7
+3             379               7
+4             397               7
+5             469               7
+6             496               7
+7             536               7
+8             563               7
+9             635               7
+10            649               7
+11            653               7
+12            694               7
+13            739               7
+14            793               7
+15            899               7
+16            937               7
+17            946               7
+18            964               7
+19            973               7
+20            989               7
+21            998               7</code></pre>
 </div>
 </div>
-<p>Counting distinct values through 1 or up to the first repeat, the longest sequence has 19 values. Twelve starting values tie: 269, 296, 629, 667, 676, 692, 766, 799, 926, 962, 979, and 997.</p>
+<p>The longest sequence among happy numbers has seven values before reaching 1. There is no unique starting value: 21 integers tie, as shown in the table.</p>
 </section>
 </section>
 </section>

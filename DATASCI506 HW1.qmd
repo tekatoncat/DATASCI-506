@@ -410,16 +410,17 @@ Of the integers from 1 through 1000, 143 are happy.
 
 The percentage is 14.3%, using all 1,000 starting integers as the denominator.
 
-### Longest sequence before reaching 1 or cycling
+### Longest happy sequence before reaching 1
 
 ```{r}
-sequence_lengths <- vapply(
-  happy_results,
+happy_starts <- which(is_happy)
+happy_lengths <- vapply(
+  happy_results[is_happy],
   function(result) length(result$sequence),
   integer(1)
 )
-longest_length <- max(sequence_lengths)
-longest_starts <- which(sequence_lengths == longest_length)
+longest_length <- max(happy_lengths)
+longest_starts <- happy_starts[happy_lengths == longest_length]
 
 data.frame(
   starting_value = longest_starts,
@@ -427,7 +428,7 @@ data.frame(
 )
 ```
 
-Counting distinct values through 1 or up to the first repeat, the longest sequence has 19 values. Twelve starting values tie: 269, 296, 629, 667, 676, 692, 766, 799, 926, 962, 979, and 997.
+The longest sequence among happy numbers has seven values before reaching 1. There is no unique starting value: 21 integers tie, as shown in the table.
 
 # Sources and acknowledgments
 
