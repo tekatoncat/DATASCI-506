@@ -1,0 +1,434 @@
+---
+title: "STAT 506 Problem Set 1"
+format:
+  html:
+    code-fold: true
+    embed-resources: true
+---
+
+# Problem 1: Exploratory Analysis of Soybean Cultivars
+
+## (a) Data source and import
+
+Data source: [Forty soybean cultivars from subsequent harvests, UCI Machine Learning Repository](https://archive.ics.uci.edu/dataset/913/forty+soybean+cultivars+from+subsequent+harvests).
+
+The observations are in `data.csv`. I use the variable names in the UCI documentation; the accompanying `cultivars-description.ods` describes the cultivars but is not needed for these calculations.
+
+```{r}
+soybean <- read.csv(
+  "data.csv",
+  header = TRUE,
+  stringsAsFactors = FALSE
+)
+
+names(soybean) <- c(
+  "Season", "Cultivar", "Repetition", "PH", "IFP", "NLP",
+  "NGP", "NGL", "NS", "MHG", "GY"
+)
+
+str(soybean)
+head(soybean, 3)
+```
+
+## (b) Verify the dataset structure
+
+```{r}
+data.frame(
+  observations = nrow(soybean),
+  distinct_cultivars = length(unique(soybean$Cultivar)),
+  distinct_seasons = length(unique(soybean$Season))
+)
+```
+
+The data contain 320 observations from 40 cultivars across two seasons.
+
+### Observations by season
+
+```{r}
+season_counts <- as.data.frame(table(soybean$Season))
+names(season_counts) <- c("Season", "Observations")
+knitr::kable(season_counts, caption = "Observations in each season")
+```
+
+Each season contributes 160 observations.
+
+## (c) Questions about the soybean data
+
+### 1. Correlation between plant height (PH) and grain yield (GY)
+
+```{r}
+cor(soybean$PH, soybean$GY)
+```
+
+The overall Pearson correlation is approximately 0.1233, a weak positive linear association between plant height and grain yield.
+
+### 2. Correlation between PH and GY by season
+
+```{r}
+season_correlations <- sapply(
+  split(soybean, soybean$Season),
+  function(season_data) cor(season_data$PH, season_data$GY)
+)
+season_correlations
+```
+
+The correlation is approximately 0.2309 in Season 1 and -0.0227 in Season 2. Season 1 has the higher correlation.
+
+### 3. Grain yield at the greatest plant height
+
+```{r}
+soybean[which.max(soybean$PH), c("Season", "Cultivar", "Repetition", "PH", "GY")]
+```
+
+The maximum recorded plant height was 94.8 cm; grain yield for that observation was approximately 3304.68.
+
+### 4. Percentage with above-average thousand seed weight (MHG)
+
+```{r}
+mean_mhg <- mean(soybean$MHG)
+above_mean_mhg <- sum(soybean$MHG > mean_mhg)
+
+data.frame(
+  overall_mean_mhg = mean_mhg,
+  observations_above_mean = above_mean_mhg,
+  percentage_above_mean = 100 * above_mean_mhg / nrow(soybean)
+)
+```
+
+The mean MHG is 168.32 g. Of the 320 observations, 151 exceed that mean, or 47.2%.
+
+### 5. Cultivar with the highest average grain yield
+
+```{r}
+mean_yield_by_cultivar <- aggregate(GY ~ Cultivar, data = soybean, FUN = mean)
+mean_yield_by_cultivar[which.max(mean_yield_by_cultivar$GY), ]
+```
+
+Cultivar 98R30 CE has the highest average grain yield, approximately 3964.97.
+
+## (d) Mean of every quantitative variable
+
+Season and Repetition identify the study design; the table summarizes the eight measured quantitative variables.
+
+```{r}
+measure_vars <- c("PH", "IFP", "NLP", "NGP", "NGL", "NS", "MHG", "GY")
+
+overall_means <- data.frame(
+  Group = "Overall",
+  t(colMeans(soybean[measure_vars])),
+  check.names = FALSE
+)
+season_means <- aggregate(
+  soybean[measure_vars],
+  by = list(Group = paste("Season", soybean$Season)),
+  FUN = mean
+)
+
+mean_table <- rbind(overall_means, season_means)
+knitr::kable(
+  mean_table,
+  digits = 2,
+  row.names = FALSE,
+  caption = "Overall and season-specific means of quantitative variables"
+)
+```
+
+Mean GY was 3428.45 in Season 1 and 3408.66 in Season 2. Mean MHG was 162.29 in Season 1 and 174.36 in Season 2.
+
+## (e) Grain yield comparison between seasons
+
+### Hypotheses and testing approach
+
+For the Welch two-sample test, the null hypothesis is equal mean GY in the two seasons; the two-sided alternative is a difference. Welch's test allows unequal variances. As a sensitivity analysis, I average repetitions within each cultivar and season, then use a paired t-test on the 40 cultivar-level differences. Its null hypothesis is a mean within-cultivar difference of zero.
+
+### R output
+
+```{r}
+gy_season_1 <- soybean$GY[soybean$Season == 1]
+gy_season_2 <- soybean$GY[soybean$Season == 2]
+
+data.frame(
+  Season = c(1, 2),
+  n = c(length(gy_season_1), length(gy_season_2)),
+  mean_GY = c(mean(gy_season_1), mean(gy_season_2)),
+  sd_GY = c(sd(gy_season_1), sd(gy_season_2))
+)
+
+welch_test <- t.test(gy_season_1, gy_season_2)
+
+cultivar_season_means <- aggregate(
+  GY ~ Cultivar + Season,
+  data = soybean,
+  FUN = mean
+)
+paired_means <- reshape(
+  cultivar_season_means,
+  idvar = "Cultivar",
+  timevar = "Season",
+  direction = "wide"
+)
+paired_test <- t.test(
+  paired_means$GY.1,
+  paired_means$GY.2,
+  paired = TRUE
+)
+
+welch_test
+paired_test
+```
+
+### Interpretation
+
+Mean GY was 19.80 higher in Season 1. For the Season 1 minus Season 2 difference, the Welch test gave p = 0.7255 and a 95% confidence interval from -91.16 to 130.75. The cultivar-level paired test gave p = 0.8573. Neither test provides evidence of a season difference at the 5% level; these results do not establish equivalence.
+
+# Problem 2: Adult Income Dataset
+
+## (a) Data source and import
+
+Data source: [Adult, UCI Machine Learning Repository](https://archive.ics.uci.edu/dataset/2/adult).
+
+I combine `adult/adult.data` and `adult/adult.test` to analyze all 48,842 records. The test file begins with a non-data line, which is skipped during import.
+
+```{r}
+adult_names <- c(
+  "age", "workclass", "fnlwgt", "education", "education-num",
+  "marital-status", "occupation", "relationship", "race", "sex",
+  "capital-gain", "capital-loss", "hours-per-week",
+  "native-country", "income"
+)
+
+adult_train <- read.csv(
+  file.path("adult", "adult.data"),
+  header = FALSE,
+  col.names = adult_names,
+  check.names = FALSE,
+  strip.white = TRUE,
+  na.strings = "?",
+  stringsAsFactors = FALSE
+)
+adult_test <- read.csv(
+  file.path("adult", "adult.test"),
+  header = FALSE,
+  skip = 1,
+  col.names = adult_names,
+  check.names = FALSE,
+  strip.white = TRUE,
+  na.strings = "?",
+  stringsAsFactors = FALSE
+)
+
+adult <- rbind(adult_train, adult_test)
+data.frame(
+  portion = c("Training", "Test", "Combined"),
+  observations = c(nrow(adult_train), nrow(adult_test), nrow(adult))
+)
+str(adult)
+```
+
+## (b) Clean and simplify variable names
+
+```{r}
+names(adult) <- gsub("-", "_", names(adult), fixed = TRUE)
+names(adult)[names(adult) == "fnlwgt"] <- "final_weight"
+names(adult)
+```
+
+The names now follow snake_case; `fnlwgt` is also renamed `final_weight`.
+
+## (c) Examine missing values
+
+```{r}
+missing_counts <- colSums(is.na(adult))
+missing_table <- data.frame(
+  variable = names(missing_counts),
+  missing_observations = as.integer(missing_counts)
+)
+knitr::kable(missing_table, caption = "Missing observations by variable")
+```
+
+Workclass has 2,799 missing values, occupation has 2,809, and native country has 857. The other 12 variables have none.
+
+## (d) Restrict to at least 10 hours worked per week
+
+```{r}
+n_before_hours <- nrow(adult)
+adult_10plus <- adult[adult$hours_per_week >= 10, ]
+
+data.frame(
+  stage = c("Before hours filter", "At least 10 hours per week"),
+  observations = c(n_before_hours, nrow(adult_10plus))
+)
+```
+
+Restricting the sample to at least 10 hours of work per week reduces it from 48,842 to 48,142 observations.
+
+## (e) Remove specified missing observations
+
+```{r}
+required_fields <- c("occupation", "workclass", "native_country")
+adult_complete <- adult_10plus[
+  complete.cases(adult_10plus[required_fields]),
+]
+
+data.frame(
+  stage = c("After hours filter", "After missing-value filter"),
+  observations = c(nrow(adult_10plus), nrow(adult_complete))
+)
+```
+
+Excluding records with an unknown occupation, workclass, or native country produces a sample complete for these three variables. It leaves 44,777 observations, 3,365 fewer than after the hours filter. If missingness is systematic, this restriction may affect the sample's representativeness.
+
+## (f) Apply age and education exclusions
+
+```{r}
+data.frame(
+  exclusion = c("Age below 18", "Age above 90", "Preschool education"),
+  observations = c(
+    sum(adult_complete$age < 18),
+    sum(adult_complete$age > 90),
+    sum(adult_complete$education == "Preschool")
+  )
+)
+
+adult_final <- adult_complete[
+  adult_complete$age >= 18 &
+    adult_complete$age <= 90 &
+    adult_complete$education != "Preschool",
+]
+```
+
+Of the remaining records, 454 have age below 18, none have age above 90, and 72 have Preschool education. Applying these exclusions removes 526 records.
+
+## (g) Final sample size
+
+```{r}
+nrow(adult_final)
+```
+
+The final sample contains 44,251 observations.
+
+# Problem 3: Happy Numbers
+
+For a positive integer, the next value in its happy-number sequence is the sum of the squares of its digits. Repeating this process either reaches 1 or enters a cycle that does not include 1.
+
+## (a) nextHappy()
+
+### Function documentation and definition
+
+```{r}
+#' Calculate the next value in a happy-number sequence
+#'
+#' @param n One finite, positive whole number.
+#' @return A positive integer: the sum of the squares of the digits of n.
+nextHappy <- function(n) {
+  if (length(n) != 1L || !is.numeric(n) || !is.finite(n) ||
+      n <= 0 || n != floor(n)) {
+    stop("n must be one positive integer.", call. = FALSE)
+  }
+
+  total <- 0L
+  while (n > 0) {
+    digit <- n %% 10
+    total <- total + as.integer(digit^2)
+    n <- n %/% 10
+  }
+
+  total
+}
+```
+
+### Reproduce the supplied examples
+
+```{r}
+nextHappy(19)
+nextHappy(82)
+```
+
+The examples return 82 and 68, as required.
+
+## (b) happySequence()
+
+### Function documentation and definition
+
+```{r}
+#' Follow a happy-number sequence until it reaches 1 or repeats
+#'
+#' @param n One finite, positive whole number.
+#' @return A list with sequence (the visited values, starting at n) and
+#'   isHappy (TRUE if the sequence reaches 1, FALSE if a value repeats).
+happySequence <- function(n) {
+  if (length(n) != 1L || !is.numeric(n) || !is.finite(n) ||
+      n <= 0 || n != floor(n)) {
+    stop("n must be one positive integer.", call. = FALSE)
+  }
+
+  sequence <- n
+  while (tail(sequence, 1L) != 1) {
+    next_value <- nextHappy(tail(sequence, 1L))
+    if (next_value %in% sequence) {
+      return(list(sequence = sequence, isHappy = FALSE))
+    }
+    sequence <- c(sequence, next_value)
+  }
+
+  list(sequence = sequence, isHappy = TRUE)
+}
+```
+
+The function applies `nextHappy()` until the sequence reaches 1 or is about to repeat a value. It does not append the repeated value; this convention also determines sequence length in part (c).
+
+### Reproduce the supplied examples
+
+```{r}
+happySequence(19)
+happySequence(4)
+```
+
+Starting at 19 reaches 1 through 19, 82, 68, 100, 1, so `isHappy` is TRUE. Starting at 4 eventually returns to 4, so `isHappy` is FALSE.
+
+## (c) Happy numbers among integers 1 through 1000
+
+### Number of happy integers
+
+```{r}
+happy_results <- lapply(1:1000, happySequence)
+is_happy <- vapply(
+  happy_results,
+  function(result) result$isHappy,
+  logical(1)
+)
+sum(is_happy)
+```
+
+Of the integers from 1 through 1000, 143 are happy.
+
+### Percentage of happy integers
+
+```{r}
+100 * sum(is_happy) / length(is_happy)
+```
+
+The percentage is 14.3%, using all 1,000 starting integers as the denominator.
+
+### Longest sequence before reaching 1 or cycling
+
+```{r}
+sequence_lengths <- vapply(
+  happy_results,
+  function(result) length(result$sequence),
+  integer(1)
+)
+longest_length <- max(sequence_lengths)
+longest_starts <- which(sequence_lengths == longest_length)
+
+data.frame(
+  starting_value = longest_starts,
+  sequence_length = longest_length
+)
+```
+
+Counting distinct values through 1 or up to the first repeat, the longest sequence has 19 values. Twelve starting values tie: 269, 296, 629, 667, 676, 692, 766, 799, 926, 962, 979, and 997.
+
+# Sources and acknowledgments
+
+The [UCI soybean dataset](https://archive.ics.uci.edu/dataset/913/forty+soybean+cultivars+from+subsequent+harvests) and [UCI Adult dataset](https://archive.ics.uci.edu/dataset/2/adult) supplied the data and variable definitions. ChatGPT assisted with reviewing the code style and text.
