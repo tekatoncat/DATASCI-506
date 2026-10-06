@@ -1,0 +1,414 @@
+---
+title: "STAT 506 Problem Set 2"
+format:
+  html:
+    code-fold: true
+    embed-resources: true
+---
+
+Repository: [DATASCI-506](https://github.com/tekatoncat/DATASCI-506)
+
+# Problem 1: Random Walk with Momentum
+
+## (a) Simulation function
+
+I label the four directions right, left, up, and down. At each step after the first, the walk retains its previous direction with probability `p`; otherwise it draws again from all four directions. The fresh draw can select the same direction.
+
+```{r}
+#' Simulate a two-dimensional random walk with momentum using a loop
+#'
+#' @param n One positive whole number of steps, at most .Machine$integer.max.
+#' @param p One probability between 0 and 1, inclusive.
+#' @return A named integer vector containing the final x and y coordinates.
+momentum_walk1 <- function(n, p) {
+  if (length(n) != 1L || !is.numeric(n) || !is.finite(n) ||
+      n < 1 || n != floor(n) || n > .Machine$integer.max) {
+    stop("n must be one positive whole number within R's integer range.",
+         call. = FALSE)
+  }
+  if (length(p) != 1L || !is.numeric(p) || !is.finite(p) ||
+      p < 0 || p > 1) {
+    stop("p must be one probability between 0 and 1.", call. = FALSE)
+  }
+
+  n <- as.integer(n)
+  x_step <- c(1L, -1L, 0L, 0L)
+  y_step <- c(0L, 0L, 1L, -1L)
+  direction <- sample.int(4L, 1L)
+  x <- x_step[direction]
+  y <- y_step[direction]
+
+  if (n > 1L) {
+    for (step in seq.int(2L, n)) {
+      if (runif(1) >= p) {
+        direction <- sample.int(4L, 1L)
+      }
+      x <- x + x_step[direction]
+      y <- y + y_step[direction]
+    }
+  }
+
+  c(x = x, y = y)
+}
+
+momentum_walk <- momentum_walk1
+```
+
+The loop keeps the current direction and coordinates, updating both coordinates after each step. `momentum_walk()` is an alias for this implementation.
+
+```{r}
+set.seed(506)
+momentum_walk(10, 0.6)
+
+c(
+  invalid_n = tryCatch(momentum_walk(0, 0.6), error = conditionMessage),
+  invalid_p = tryCatch(momentum_walk(10, 1.2), error = conditionMessage)
+)
+```
+
+## (b) Loop and apply implementations
+
+```{r}
+#' Simulate a two-dimensional random walk with momentum using vapply
+#'
+#' @param n One positive whole number of steps, at most .Machine$integer.max.
+#' @param p One probability between 0 and 1, inclusive.
+#' @return A named integer vector containing the final x and y coordinates.
+momentum_walk2 <- function(n, p) {
+  if (length(n) != 1L || !is.numeric(n) || !is.finite(n) ||
+      n < 1 || n != floor(n) || n > .Machine$integer.max) {
+    stop("n must be one positive whole number within R's integer range.",
+         call. = FALSE)
+  }
+  if (length(p) != 1L || !is.numeric(p) || !is.finite(p) ||
+      p < 0 || p > 1) {
+    stop("p must be one probability between 0 and 1.", call. = FALSE)
+  }
+
+  n <- as.integer(n)
+  direction <- sample.int(4L, 1L)
+  directions <- c(direction, vapply(
+    seq_len(n - 1L),
+    function(step) {
+      if (runif(1) >= p) {
+        direction <<- sample.int(4L, 1L)
+      }
+      direction
+    },
+    integer(1)
+  ))
+
+  c(
+    x = sum(directions == 1L) - sum(directions == 2L),
+    y = sum(directions == 3L) - sum(directions == 4L)
+  )
+}
+
+set.seed(506)
+momentum_walk1(10, 0.6)
+momentum_walk2(10, 0.6)
+momentum_walk1(1000, 0.6)
+momentum_walk2(1000, 0.6)
+```
+
+The `vapply()` version records each direction, then converts the direction counts into the final coordinates. Updating `direction` with `<<-` lets each step use the preceding direction. These successive calls use different parts of the random-number sequence, so their final positions can differ.
+
+## (c) Reproducibility
+
+```{r}
+repeated_walks <- lapply(c(10L, 1000L), function(steps) {
+  set.seed(506)
+  first <- momentum_walk1(steps, 0.6)
+  set.seed(506)
+  second <- momentum_walk1(steps, 0.6)
+
+  data.frame(
+    n = steps,
+    first_x = first["x"],
+    first_y = first["y"],
+    second_x = second["x"],
+    second_y = second["y"],
+    identical_results = identical(first, second),
+    row.names = NULL
+  )
+})
+knitr::kable(do.call(rbind, repeated_walks), row.names = FALSE)
+```
+
+Resetting the same random seed before each call restores the generator to the same state. For both step counts, the repeated calls therefore use the same sequence of random draws and return identical coordinates.
+
+## (d) Does momentum matter in three walks?
+
+```{r}
+set.seed(507)
+momentum_values <- c(0, 0.5, 0.9)
+single_walks <- t(vapply(
+  momentum_values,
+  function(probability) momentum_walk1(1000, probability),
+  integer(2)
+))
+
+single_distances <- data.frame(
+  p = momentum_values,
+  x = single_walks[, "x"],
+  y = single_walks[, "y"],
+  distance = sqrt(rowSums(single_walks^2))
+)
+knitr::kable(single_distances, digits = 2, row.names = FALSE)
+```
+
+The distances in these three walks increase from `r round(single_distances$distance[1], 2)` at `p = 0` to `r round(single_distances$distance[3], 2)` at `p = 0.9`. This suggests that momentum increases the final distance, but one walk at each probability gives only limited evidence. Part (e) checks the pattern over many walks.
+
+## (e) Monte Carlo comparison
+
+```{r}
+set.seed(508)
+momentum_values_mc <- c(0, 0.25, 0.5, 0.75, 0.9)
+mean_distances <- vapply(momentum_values_mc, function(probability) {
+  final_positions <- replicate(1000, momentum_walk1(1000, probability))
+  mean(sqrt(colSums(final_positions^2)))
+}, numeric(1))
+
+mc_results <- data.frame(
+  p = momentum_values_mc,
+  mean_distance = mean_distances
+)
+knitr::kable(mc_results, digits = 2, row.names = FALSE)
+```
+
+Mean final distance rises as `p` increases. Persistence makes runs in the same direction longer, so the walk tends to finish farther from its starting point.
+
+## (f) Computational performance
+
+```{r}
+set.seed(509)
+benchmark_1000 <- microbenchmark::microbenchmark(
+  loop = momentum_walk1(1000, 0.6),
+  apply = momentum_walk2(1000, 0.6),
+  times = 30L,
+  unit = "ms"
+)
+benchmark_100000 <- microbenchmark::microbenchmark(
+  loop = momentum_walk1(100000, 0.6),
+  apply = momentum_walk2(100000, 0.6),
+  times = 10L,
+  unit = "ms"
+)
+
+benchmark_table <- rbind(
+  data.frame(n = 1000L, summary(benchmark_1000)[, c("expr", "median")]),
+  data.frame(n = 100000L, summary(benchmark_100000)[, c("expr", "median")])
+)
+names(benchmark_table) <- c("n", "implementation", "median_ms")
+benchmark_gaps <- c(
+  median(benchmark_1000$time[benchmark_1000$expr == "apply"]) -
+    median(benchmark_1000$time[benchmark_1000$expr == "loop"]),
+  median(benchmark_100000$time[benchmark_100000$expr == "apply"]) -
+    median(benchmark_100000$time[benchmark_100000$expr == "loop"])
+) / 1e6
+benchmark_conclusion <- if (all(benchmark_gaps > 0)) {
+  "The loop version is faster at both input sizes."
+} else if (all(benchmark_gaps < 0)) {
+  "The apply version is faster at both input sizes."
+} else {
+  "Which implementation is faster depends on the input size in this run."
+}
+gap_comparison <- if (abs(benchmark_gaps[2]) > abs(benchmark_gaps[1])) {
+  "larger"
+} else {
+  "no larger"
+}
+benchmark_table$n <- format(benchmark_table$n, scientific = FALSE, trim = TRUE)
+knitr::kable(benchmark_table, digits = 2, row.names = FALSE)
+```
+
+`r benchmark_conclusion` The absolute gap between median times is `r round(abs(benchmark_gaps[1]), 2)` ms at 1,000 steps and `r round(abs(benchmark_gaps[2]), 2)` ms at 100,000 steps, so it is `r gap_comparison` for the larger input. The `vapply()` version calls a function at every step and stores all directions before summing them. The loop keeps only the current direction and coordinates, which reduces that overhead. Timings can vary between runs.
+
+# Problem 2: Monte Carlo Simulation of Campus Bus Arrivals
+
+The Normal distributions have standard deviations of 4 and 5. I generate the hourly passenger counts for 10,000 days and sum them by day using vector and matrix operations.
+
+```{r}
+set.seed(510)
+n_days <- 10000L
+
+daily_total <- rowSums(matrix(rpois(n_days * 3L, lambda = 4), nrow = n_days)) +
+  rnorm(n_days, mean = 45, sd = sqrt(16)) +
+  rowSums(matrix(rpois(n_days * 6L, lambda = 15), nrow = n_days)) +
+  rnorm(n_days, mean = 55, sd = sqrt(25)) +
+  rowSums(matrix(rpois(n_days * 6L, lambda = 9), nrow = n_days))
+
+data.frame(
+  simulated_days = length(daily_total),
+  estimated_mean = mean(daily_total),
+  monte_carlo_se = sd(daily_total) / sqrt(n_days),
+  mean_from_given_distributions = 3 * 4 + 45 + 6 * 15 + 55 + 6 * 9
+)
+```
+
+The simulation estimates an average of `r round(mean(daily_total), 2)` passengers per day. The distributional assumptions imply a mean of 256, which provides a check on the Monte Carlo result. Normal draws are treated as continuous approximations to peak-hour counts, as specified in the question.
+
+# Problem 3: Linear Regression
+
+## (a) Data preparation and de-identification
+
+Data source: [TidyTuesday Super Bowl commercials](https://github.com/rfordatascience/tidytuesday/tree/main/data/2021/2021-03-02). I retain the year, seven coded commercial characteristics, and five engagement counts. This removes the brand, title, links, video identifiers, channel information, publication information, and other metadata that could identify an individual commercial.
+
+```{r}
+youtube <- read.csv(
+  "https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-02/youtube.csv"
+)
+
+characteristics <- c(
+  "funny", "show_product_quickly", "patriotic", "celebrity",
+  "danger", "animals", "use_sex"
+)
+engagement_counts <- c(
+  "view_count", "like_count", "dislike_count",
+  "favorite_count", "comment_count"
+)
+youtube_analysis <- youtube[c("year", characteristics, engagement_counts)]
+
+data.frame(
+  observations = nrow(youtube_analysis),
+  variables = ncol(youtube_analysis)
+)
+names(youtube_analysis)
+```
+
+The resulting dataset has 247 observations and 13 variables.
+
+## (b) Exploring potential outcomes
+
+```{r}
+outcome_summary <- data.frame(
+  outcome = engagement_counts,
+  observed = vapply(youtube_analysis[engagement_counts],
+                    function(values) sum(!is.na(values)), integer(1)),
+  zeros = vapply(youtube_analysis[engagement_counts],
+                 function(values) sum(values == 0, na.rm = TRUE), integer(1)),
+  median = vapply(youtube_analysis[engagement_counts],
+                  function(values) median(values, na.rm = TRUE), numeric(1)),
+  percentile_95 = vapply(youtube_analysis[engagement_counts],
+                         function(values) unname(quantile(values, 0.95, na.rm = TRUE)),
+                         numeric(1)),
+  maximum = vapply(youtube_analysis[engagement_counts],
+                   function(values) max(values, na.rm = TRUE), numeric(1)),
+  row.names = NULL
+)
+knitr::kable(outcome_summary, digits = 0, row.names = FALSE)
+```
+
+View counts have a long right tail: the median is 41,379, while the maximum exceeds 176 million. Like, dislike, and comment counts are also strongly right-skewed, with some zeros. I use `log1p()` for all four, which compresses the upper tail and is defined at zero. Favorite count is zero in every observed record, so it has no variation to model as an outcome.
+
+```{r}
+modeled_counts <- setdiff(engagement_counts, "favorite_count")
+transformed_outcomes <- paste0("log_", modeled_counts)
+
+for (index in seq_along(modeled_counts)) {
+  youtube_analysis[[transformed_outcomes[index]]] <-
+    log1p(youtube_analysis[[modeled_counts[index]]])
+}
+
+data.frame(
+  outcome = engagement_counts,
+  decision = c(rep("Transform with log1p", 3),
+               "Exclude: constant zero", "Transform with log1p")
+)
+```
+
+Each model uses records with observed values for its outcome, characteristic, and year. The log transformation reduces skewness; model assumptions still depend on the residuals.
+
+## (c) Fitting linear regression models
+
+Each model contains one binary characteristic and year as a continuous covariate. The reported characteristic coefficient compares ads coded `TRUE` with those coded `FALSE`, conditional on year, on the `log1p()` outcome scale.
+
+```{r}
+#' Fit one year-adjusted model for a transformed engagement outcome
+#'
+#' @param data A data frame with the outcome, characteristic, and year.
+#' @param outcome Name of a transformed engagement outcome.
+#' @param characteristic Name of one logical commercial characteristic.
+#' @return A one-row data frame with sample size, coefficient, and p-value.
+fit_engagement_model <- function(data, outcome, characteristic) {
+  model_formula <- reformulate(c(characteristic, "year"), response = outcome)
+  model <- lm(model_formula, data = data)
+  coefficient <- summary(model)$coefficients[paste0(characteristic, "TRUE"), ]
+
+  data.frame(
+    outcome = outcome,
+    characteristic = characteristic,
+    n = nobs(model),
+    estimate = unname(coefficient["Estimate"]),
+    p_value = unname(coefficient["Pr(>|t|)"])
+  )
+}
+
+model_results <- do.call(rbind, lapply(transformed_outcomes, function(outcome) {
+  do.call(rbind, lapply(characteristics, function(characteristic) {
+    fit_engagement_model(youtube_analysis, outcome, characteristic)
+  }))
+}))
+row.names(model_results) <- NULL
+
+display_results <- data.frame(
+  outcome = model_results$outcome,
+  characteristic = model_results$characteristic,
+  n = model_results$n,
+  estimate = round(model_results$estimate, 3),
+  p_value = format.pval(model_results$p_value, digits = 3, eps = 0.001)
+)
+knitr::kable(display_results, row.names = FALSE)
+```
+
+No characteristic is statistically significant at the 0.05 level for views, likes, dislikes, or comments in these year-adjusted models. For view counts, `danger` has the largest positive estimated coefficient, about 0.667 on the log scale, with a p-value of about 0.094. The models describe associations and cannot establish causation.
+
+## (d) Regression coefficients from matrix algebra
+
+Among the seven view-count models, `danger` has the smallest p-value. I use the same complete records and `log1p(view_count)` outcome as in part (c).
+
+```{r}
+view_results <- model_results[
+  model_results$outcome == "log_view_count",
+]
+selected_characteristic <- view_results$characteristic[
+  which.min(view_results$p_value)
+]
+selected_characteristic
+
+complete_rows <- complete.cases(youtube_analysis[
+  c("log_view_count", selected_characteristic, "year")
+])
+matrix_data <- data.frame(
+  response = youtube_analysis$log_view_count[complete_rows],
+  characteristic = as.integer(
+    youtube_analysis[[selected_characteristic]][complete_rows]
+  ),
+  year = youtube_analysis$year[complete_rows]
+)
+
+design_matrix <- cbind(
+  "(Intercept)" = 1,
+  characteristic = matrix_data$characteristic,
+  year = matrix_data$year
+)
+matrix_estimates <- drop(solve(
+  crossprod(design_matrix),
+  crossprod(design_matrix, matrix_data$response)
+))
+lm_estimates <- coef(lm(response ~ characteristic + year, data = matrix_data))
+
+data.frame(
+  coefficient = names(lm_estimates),
+  matrix_formula = as.numeric(matrix_estimates),
+  lm = as.numeric(lm_estimates),
+  absolute_difference = abs(as.numeric(matrix_estimates - lm_estimates))
+)
+all.equal(matrix_estimates, lm_estimates, check.attributes = FALSE)
+```
+
+The matrix calculation and `lm()` produce the same intercept, `danger` coefficient, and year coefficient up to numerical precision. The design matrix contains one intercept column, the 0/1 indicator for `danger`, and year.
+
+# Sources and acknowledgments
+
+ChatGPT assisted with reviewing the code style and texts.
